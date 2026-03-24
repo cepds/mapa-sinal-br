@@ -1,6 +1,8 @@
-# Mapa Sinal BR
+<p align="center">
+  <img src="public/assets/branding/mapa-sinal-br-profile.png" width="160" alt="Mapa Sinal BR">
+</p>
 
-![Mapa Sinal BR](public/assets/branding/mapa-sinal-br-avatar.svg)
+<h1 align="center">Mapa Sinal BR</h1>
 
 Radar visual para infraestrutura celular no Brasil, focado em TIM e Vivo, com mapa profissional, busca por CEP/localidade/coordenadas, camada nacional de torres e leitura de cobertura oficial.
 
