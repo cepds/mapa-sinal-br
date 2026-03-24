@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mapa Sinal BR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <div class="hero-brand">
+            <img src="/assets/branding/mapa-sinal-br-avatar.svg" alt="Marca Mapa Sinal BR">
+            <div>
+              <p class="eyebrow">Mapa Sinal BR</p>
+              <span class="hero-brand__subline">Radar nacional de infraestrutura TIM e Vivo</span>
+            </div>
+          </div>
+          <h1>Mapa ao vivo de antenas, cobertura e consulta por localidade.</h1>
+          <p class="hero-text">
+            Projeto standalone para localizar ERBs TIM e Vivo por CEP, regiao, cidade ou coordenadas,
+            usando dados atuais da Anatel, cobertura oficial por ponto e camada nacional consolidada.
+          </p>
+          <div class="hero-badges">
+            <span>Anatel ao vivo</span>
+            <span>Mapa em tempo real</span>
+            <span>Busca por CEP</span>
+            <span>Cobertura Vivo</span>
+            <span>Brasil completo</span>
+          </div>
+        </div>
+        <div class="hero-card-stack">
+          <article class="hero-mini-card">
+            <span class="eyebrow">ERBs</span>
+            <strong>TIM e Vivo</strong>
+            <p>Consulta atual com latitude, longitude, tecnologia, potencia e validade.</p>
+          </article>
+          <article class="hero-mini-card">
+            <span class="eyebrow">Cobertura</span>
+            <strong>Ponto central</strong>
+            <p>Leitura oficial da Vivo para 2G, 3G, 4G e 5G quando a camada estiver publicada.</p>
+          </article>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Busca</p>
+              <h2>Escolha o tipo de localizacao</h2>
+            </div>
+            <div class="chip-row">
+              <button id="refresh-search" class="ghost-button" type="button" disabled>Atualizar busca atual</button>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <form id="geocode-form" class="form-panel">
+              <h3>CEP, endereco ou regiao</h3>
+              <p>Digite CEP, bairro, rua, cidade ou nome da regiao para centralizar o mapa.</p>
+              <label>
+                Busca livre
+                <input id="geocode-query" type="text" placeholder="Ex.: 01001000, Vila Mariana SP ou Praia Grande SP">
+              </label>
+              <label>
+                Raio de busca (km)
+                <input id="geocode-radius" type="number" min="1" max="30" step="1" value="3">
+              </label>
+              <button class="primary-button" type="submit">Buscar no mapa</button>
+            </form>
+
+            <form id="city-form" class="form-panel">
+              <h3>Cidade e UF</h3>
+              <p>Usa o centro do municipio e um raio ajustavel para visualizar a area no mapa.</p>
+              <label>
+                UF
+                <select id="state-select">
+                  <option value="">Selecione</option>
+                </select>
+              </label>
+              <label>
+                Municipio
+                <select id="city-select" disabled>
+                  <option value="">Selecione primeiro a UF</option>
+                </select>
+              </label>
+              <label>
+                Raio da cidade (km)
+                <input id="city-radius" type="number" min="3" max="40" step="1" value="12">
+              </label>
+              <button class="primary-button" type="submit">Buscar cidade</button>
+            </form>
+
+            <form id="coords-form" class="form-panel">
+              <h3>Coordenadas</h3>
+              <p>Use latitude e longitude quando voce ja sabe o ponto exato.</p>
+              <div class="inline-grid">
+                <label>
+                  Latitude
+                  <input id="coords-lat" type="number" step="0.000001" value="-23.5504">
+                </label>
+                <label>
+                  Longitude
+                  <input id="coords-lon" type="number" step="0.000001" value="-46.6339">
+                </label>
+              </div>
+              <label>
+                Raio de busca (km)
+                <input id="coords-radius" type="number" min="1" max="30" step="1" value="3">
+              </label>
+              <button class="primary-button" type="submit">Buscar coordenadas</button>
+            </form>
+          </div>
+
+          <div id="search-feedback" class="feedback" aria-live="polite"></div>
+          <div id="geocode-results" class="geocode-results"></div>
+        </section>
+
+        <section class="map-layout">
+          <article class="card map-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Mapa</p>
+                <h2>Visualizacao da busca</h2>
+              </div>
+              <div id="search-meta" class="meta-chip">Nenhuma busca executada</div>
+            </div>
+            <div class="map-toolbar">
+              <div id="basemap-controls" class="segmented-control" role="group" aria-label="Camada base do mapa">
+                <button class="segment-button is-active" type="button" data-basemap="satellite">Satelite</button>
+                <button class="segment-button" type="button" data-basemap="street">Ruas</button>
+              </div>
+              <label class="map-toggle">
+                <input id="national-layer-enabled" type="checkbox" checked>
+                <span>Torres do Brasil</span>
+              </label>
+              <div id="national-layer-status" class="map-status-pill is-loading">Preparando camada Brasil...</div>
+            </div>
+            <div id="map"></div>
+            <div class="legend">
+              <span><i class="dot dot-center"></i>Centro</span>
+              <span><i class="dot dot-tim"></i>TIM</span>
+              <span><i class="dot dot-vivo"></i>Vivo</span>
+            </div>
+          </article>
+
+          <article class="card summary-card network-monitor-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Monitor</p>
+                <h2>Painel de cobertura oficial</h2>
+              </div>
+              <div class="monitor-badge-strip">
+                <span class="monitor-badge is-live">Ao vivo</span>
+                <span class="monitor-badge">TIM e Vivo</span>
+              </div>
+            </div>
+            <div id="coverage-map-controls" class="coverage-map-controls">
+              <article class="coverage-operator-card coverage-operator-card--tim">
+                <div class="coverage-operator-head">
+                  <div class="coverage-operator-meta">
+                    <label class="coverage-toggle">
+                      <input id="tim-coverage-enabled" type="checkbox" checked>
+                      <span>TIM</span>
+                    </label>
+                    <p class="coverage-operator-copy">Camada oficial no mapa com troca rapida de tecnologia.</p>
+                  </div>
+                  <span class="chip">Mapa</span>
+                </div>
+                <div id="tim-tech-grid" class="tech-button-grid"></div>
+              </article>
+
+              <article class="coverage-operator-card coverage-operator-card--vivo">
+                <div class="coverage-operator-head">
+                  <div class="coverage-operator-meta">
+                    <label class="coverage-toggle">
+                      <input id="vivo-coverage-enabled" type="checkbox" checked>
+                      <span>Vivo</span>
+                    </label>
+                    <p class="coverage-operator-copy">Mapa oficial e leitura por ponto central da busca.</p>
+                  </div>
+                  <span class="chip">Mapa + ponto</span>
+                </div>
+                <div id="vivo-tech-grid" class="tech-button-grid"></div>
+              </article>
+            </div>
+            <div id="coverage-map-status" class="coverage-map-status">
+              Carregando controles de cobertura oficial...
+            </div>
+            <div id="summary-cards" class="summary-cards">
+              <div class="placeholder-box">Os indicadores aparecem aqui depois da primeira busca.</div>
+            </div>
+            <div id="coverage-panel" class="coverage-panel">
+              <div class="placeholder-box">A cobertura oficial da Vivo aparece aqui para o centro da busca.</div>
+            </div>
+          </article>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Antenas</p>
+              <h2>Estacoes encontradas</h2>
+            </div>
+          </div>
+          <div id="stations-table" class="table-wrapper">
+            <div class="placeholder-box">Nenhuma estacao carregada ainda.</div>
+          </div>
+        </section>
+
+        <section class="two-column">
+          <details id="sources-details" class="card sources-details">
+            <summary class="sources-summary">
+              <div>
+                <p class="eyebrow">Fontes</p>
+                <h2>Atualizacao e saude das fontes</h2>
+              </div>
+              <div id="sources-meta" class="meta-chip">Oculto</div>
+            </summary>
+            <div class="sources-actions">
+              <button id="refresh-sources" class="ghost-button" type="button">Atualizar fontes</button>
+            </div>
+            <div id="sources-grid" class="sources-grid">
+              <div class="placeholder-box">Abra este painel para consultar as fontes externas.</div>
+            </div>
+          </details>
+
+          <article class="card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Diagnostico</p>
+                <h2>Leitura rapida de sinal</h2>
+              </div>
+            </div>
+            <form id="signal-form" class="signal-form">
+              <div class="inline-grid three">
+                <label>
+                  RSRP (dBm)
+                  <input id="metric-rsrp" type="number" step="1" value="-92">
+                </label>
+                <label>
+                  RSRQ (dB)
+                  <input id="metric-rsrq" type="number" step="1" value="-11">
+                </label>
+                <label>
+                  SINR (dB)
+                  <input id="metric-sinr" type="number" step="1" value="12">
+                </label>
+              </div>
+              <button class="primary-button" type="submit">Classificar sinal</button>
+            </form>
+            <div id="signal-result" class="signal-result">
+              Preencha as metricas para estimar se ha degradacao de radio no ponto.
+            </div>
+            <div class="note-box">
+              Esse quadro ajuda a triagem rapida. Para validacao completa, ainda vale cruzar com medicao de campo,
+              horario, indoor e carga da celula.
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/vendor/leaflet/leaflet.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

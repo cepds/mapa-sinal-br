@@ -1,0 +1,14 @@
+node_modules/
+dist/
+
+data/**/*.zip
+data/**/*.xlsx
+data/telecocare-cache/*
+!data/README.md
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+.DS_Store
+Thumbs.db
