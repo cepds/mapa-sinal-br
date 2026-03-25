@@ -1325,6 +1325,7 @@ function renderGeocodeResults(payload, radiusKm) {
         <div class="chip-row">
           ${item.lat !== null ? `<span class="chip">Lat ${escapeHtml(String(item.lat))}</span>` : ''}
           ${item.lon !== null ? `<span class="chip">Lon ${escapeHtml(String(item.lon))}</span>` : ''}
+          ${item.isConfident === false ? '<span class="chip">Revisar local</span>' : ''}
         </div>
       </div>
       <button
@@ -1334,6 +1335,7 @@ function renderGeocodeResults(payload, radiusKm) {
         data-lon="${escapeHtml(String(item.lon))}"
         data-label="${escapeHtml(item.displayName || item.label || 'Ponto geocodificado')}"
         data-radius="${escapeHtml(String(radiusKm))}"
+        ${item.lat === null || item.lon === null ? 'disabled' : ''}
       >
         Usar no mapa
       </button>
@@ -1513,11 +1515,16 @@ document.querySelector('#geocode-form').addEventListener('submit', async (event)
     renderGeocodeResults(payload, radiusKm);
     const first = payload.results?.[0];
 
-    if (first?.lat !== null && first?.lon !== null) {
+    if (first?.lat !== null && first?.lon !== null && payload.autoUse !== false) {
       previewGeocodedLocation(first.lat, first.lon, radiusKm, first.displayName || first.label || query);
       await searchByRadius(first.lat, first.lon, radiusKm, first.displayName || first.label || query);
+    } else if (first?.lat !== null && first?.lon !== null) {
+      setFeedback(
+        payload.warning || 'A localizacao ficou ambigua. Confira o resultado e use o botao do ponto correto.',
+        'info'
+      );
     } else {
-      setFeedback('Nao foi possivel transformar essa busca em coordenadas.', 'error');
+      setFeedback(payload.warning || 'Nao foi possivel transformar essa busca em coordenadas.', 'error');
     }
   } catch (error) {
     setFeedback(error.message, 'error');

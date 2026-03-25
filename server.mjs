@@ -1403,10 +1403,143 @@ async function fetchSourceStatus() {
   });
 }
 
+function normalizeSearchText(value = '') {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenizeSearchText(value = '', { minLength = 2 } = {}) {
+  return [...new Set(
+    normalizeSearchText(value)
+      .split(' ')
+      .filter((token) => token.length >= minLength)
+  )];
+}
+
+function extractNumberTokens(value = '') {
+  return tokenizeSearchText(value, { minLength: 1 }).filter((token) => /\d/.test(token));
+}
+
+function buildGeocodeCandidateHaystack(candidate = {}) {
+  const addressParts = candidate.address && typeof candidate.address === 'object'
+    ? Object.values(candidate.address)
+    : [];
+
+  return normalizeSearchText(
+    [
+      candidate.label,
+      candidate.displayName,
+      candidate.name,
+      ...addressParts
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+}
+
+function countMatchedTokens(tokens = [], haystack = '') {
+  return tokens.reduce(
+    (count, token) => (haystack.includes(token) ? count + 1 : count),
+    0
+  );
+}
+
+function scoreFreeTextCandidate(candidate, query) {
+  const haystack = buildGeocodeCandidateHaystack(candidate);
+  if (!haystack) {
+    return -100;
+  }
+
+  const queryText = normalizeSearchText(query);
+  const wordTokens = tokenizeSearchText(query, { minLength: 3 });
+  const numberTokens = extractNumberTokens(query);
+  const matchedWords = countMatchedTokens(wordTokens, haystack);
+  const matchedNumbers = countMatchedTokens(numberTokens, haystack);
+  const missingWords = Math.max(wordTokens.length - matchedWords, 0);
+  const missingNumbers = Math.max(numberTokens.length - matchedNumbers, 0);
+
+  let score = 0;
+  if (queryText && haystack.includes(queryText)) score += 12;
+  score += matchedWords * 2;
+  score += matchedNumbers * 5;
+  score -= missingWords * 1.4;
+  score -= missingNumbers * 7;
+
+  if (numberTokens.length && matchedNumbers === 0) score -= 4;
+  if (wordTokens.length >= 3 && matchedWords < Math.ceil(wordTokens.length / 2)) score -= 3;
+
+  return score + Number(candidate.importance || 0);
+}
+
+function scoreCepCandidate(candidate, viaCep, cleanCep, options = {}) {
+  const { streetStrict = true, neighborhoodStrict = true } = options;
+  const haystack = buildGeocodeCandidateHaystack(candidate);
+  if (!haystack) {
+    return -100;
+  }
+
+  const postcode = String(candidate.address?.postcode || candidate.displayName || '')
+    .replace(/\D/g, '')
+    .slice(0, 8);
+  const cityTokens = tokenizeSearchText(viaCep.localidade, { minLength: 3 });
+  const neighborhoodTokens = tokenizeSearchText(viaCep.bairro, { minLength: 3 });
+  const streetWordTokens = tokenizeSearchText(viaCep.logradouro, { minLength: 3 });
+  const streetNumberTokens = tokenizeSearchText(viaCep.logradouro, { minLength: 1 }).filter((token) => /\d/.test(token));
+  const stateTokens = tokenizeSearchText(viaCep.uf, { minLength: 2 });
+
+  const matchedCity = countMatchedTokens(cityTokens, haystack);
+  const matchedNeighborhood = countMatchedTokens(neighborhoodTokens, haystack);
+  const matchedStreetWords = countMatchedTokens(streetWordTokens, haystack);
+  const matchedStreetNumbers = countMatchedTokens(streetNumberTokens, haystack);
+  const matchedState = countMatchedTokens(stateTokens, haystack);
+
+  let score = 0;
+  if (postcode && postcode === cleanCep) score += 12;
+  else if (postcode) score -= 8;
+
+  score += matchedState * 2;
+  score += matchedCity * 3;
+  score += matchedNeighborhood * 4;
+  score += matchedStreetWords * 2;
+  score += matchedStreetNumbers * 5;
+
+  if (cityTokens.length && matchedCity === 0 && matchedNeighborhood === 0) score -= 4;
+  if (neighborhoodStrict && neighborhoodTokens.length && matchedNeighborhood === 0) score -= 5;
+  if (streetStrict && streetNumberTokens.length && matchedStreetNumbers === 0) score -= 6;
+  if (streetStrict && streetWordTokens.length >= 2 && matchedStreetWords === 0) score -= 3;
+
+  return score + Number(candidate.importance || 0);
+}
+
+function rankGeocodeCandidates(candidates, scorer) {
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      matchScore: Number(scorer(candidate).toFixed(2))
+    }))
+    .sort((left, right) => right.matchScore - left.matchScore || Number(right.importance || 0) - Number(left.importance || 0));
+}
+
+function candidateMatchesAllQueryNumbers(candidate, query) {
+  const numberTokens = extractNumberTokens(query);
+  if (!numberTokens.length) {
+    return true;
+  }
+
+  const haystack = buildGeocodeCandidateHaystack(candidate);
+  return numberTokens.every((token) => haystack.includes(token));
+}
+
 async function geocodeFreeText(query, limit = 5) {
   const url = new URL(NOMINATIM_URL);
   url.search = new URLSearchParams({
     format: 'jsonv2',
+    addressdetails: '1',
     countrycodes: 'br',
     limit: String(limit),
     q: query
@@ -1420,11 +1553,14 @@ async function geocodeFreeText(query, limit = 5) {
 
   return data.map((item) => ({
     label: item.name || item.display_name,
+    name: item.name || null,
     displayName: item.display_name,
     lat: Number(item.lat),
     lon: Number(item.lon),
     category: item.category,
-    type: item.type
+    type: item.type,
+    importance: Number(item.importance || 0),
+    address: item.address || {}
   }));
 }
 
@@ -1439,46 +1575,96 @@ async function geocodeCep(cep) {
     throw new Error('CEP nao encontrado.');
   }
 
-  const queries = [
-    [viaCep.logradouro, viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil', viaCep.cep],
-    [viaCep.logradouro, viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil'],
-    [viaCep.logradouro, viaCep.localidade, viaCep.uf, 'Brasil'],
-    [viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil'],
-    [viaCep.localidade, viaCep.uf, 'Brasil', viaCep.cep],
-    [viaCep.localidade, viaCep.uf, 'Brasil']
-  ]
-    .map((parts) => parts.filter(Boolean).join(', '))
-    .filter(Boolean);
+  const queryPlans = [
+    {
+      query: [viaCep.logradouro, viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil', viaCep.cep].filter(Boolean).join(', '),
+      minimumScore: 12,
+      streetStrict: true,
+      neighborhoodStrict: true
+    },
+    {
+      query: [viaCep.logradouro, viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil'].filter(Boolean).join(', '),
+      minimumScore: 10,
+      streetStrict: true,
+      neighborhoodStrict: true
+    },
+    {
+      query: [viaCep.logradouro, viaCep.localidade, viaCep.uf, 'Brasil'].filter(Boolean).join(', '),
+      minimumScore: 8,
+      streetStrict: true,
+      neighborhoodStrict: false
+    },
+    {
+      query: [viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil'].filter(Boolean).join(', '),
+      minimumScore: 6,
+      streetStrict: false,
+      neighborhoodStrict: true
+    },
+    {
+      query: [viaCep.localidade, viaCep.uf, 'Brasil', viaCep.cep].filter(Boolean).join(', '),
+      minimumScore: 5,
+      streetStrict: false,
+      neighborhoodStrict: false
+    },
+    {
+      query: [viaCep.localidade, viaCep.uf, 'Brasil'].filter(Boolean).join(', '),
+      minimumScore: 4,
+      streetStrict: false,
+      neighborhoodStrict: false
+    }
+  ].filter((plan) => plan.query);
 
-  let first = null;
-  let displayName = queries[0] || `${viaCep.localidade}/${viaCep.uf}`;
+  let bestCandidate = null;
+  const fallbackDisplayName = queryPlans[0]?.query || `${viaCep.localidade}/${viaCep.uf}`;
 
-  for (const query of queries) {
-    const matches = await geocodeFreeText(query, 1);
-    const candidate = matches[0] || null;
+  for (const plan of queryPlans) {
+    const ranked = rankGeocodeCandidates(
+      await geocodeFreeText(plan.query, 6),
+      (candidate) =>
+        scoreCepCandidate(candidate, viaCep, cleanCep, {
+          streetStrict: plan.streetStrict,
+          neighborhoodStrict: plan.neighborhoodStrict
+        })
+    );
+    const accepted = ranked.find(
+      (candidate) =>
+        Number.isFinite(candidate.lat) &&
+        Number.isFinite(candidate.lon) &&
+        candidate.matchScore >= plan.minimumScore
+    );
 
-    if (candidate && Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon)) {
-      first = candidate;
-      displayName = candidate.displayName || query;
+    if (accepted) {
+      bestCandidate = accepted;
       break;
     }
 
-    if (!first && candidate) {
-      first = candidate;
-      displayName = candidate.displayName || query;
+    if (ranked[0] && (!bestCandidate || ranked[0].matchScore > bestCandidate.matchScore)) {
+      bestCandidate = ranked[0];
     }
   }
 
+  const hasCoordinates =
+    Number.isFinite(bestCandidate?.lat) &&
+    Number.isFinite(bestCandidate?.lon) &&
+    Number(bestCandidate?.matchScore || 0) >= 4;
+  const isConfident = hasCoordinates && Number(bestCandidate?.matchScore || 0) >= 6;
+
   return {
     query: cleanCep,
+    autoUse: isConfident,
+    warning: hasCoordinates
+      ? null
+      : 'Nao encontrei esse CEP com confianca suficiente para mover o mapa sozinho.',
     results: [
       {
         label: `${viaCep.logradouro || 'CEP'} - ${viaCep.localidade}/${viaCep.uf}`,
-        displayName,
-        lat: first?.lat ?? null,
-        lon: first?.lon ?? null,
+        displayName: bestCandidate?.displayName || fallbackDisplayName,
+        lat: hasCoordinates ? bestCandidate.lat : null,
+        lon: hasCoordinates ? bestCandidate.lon : null,
         source: 'viacep+nominatim',
-        address: viaCep
+        address: viaCep,
+        matchScore: Number(bestCandidate?.matchScore || 0),
+        isConfident
       }
     ]
   };
@@ -1494,10 +1680,31 @@ async function geocodeQuery(query) {
     return geocodeCep(normalized);
   }
 
-  return memo(`geocode:${normalized.toLowerCase()}`, 1000 * 60 * 60 * 12, async () => ({
-    query: normalized,
-    results: await geocodeFreeText(normalized, 5)
-  }));
+  return memo(`geocode:${normalized.toLowerCase()}`, 1000 * 60 * 60 * 12, async () => {
+    const ranked = rankGeocodeCandidates(
+      await geocodeFreeText(normalized, 8),
+      (candidate) => scoreFreeTextCandidate(candidate, normalized)
+    );
+    const filtered = ranked.filter((candidate) => candidate.matchScore >= 4).slice(0, 5);
+    const results = filtered.length ? filtered : ranked.filter((candidate) => candidate.matchScore >= 1).slice(0, 5);
+    const isConfident = Boolean(
+      results[0]?.matchScore >= 10 &&
+      candidateMatchesAllQueryNumbers(results[0], normalized)
+    );
+
+    return {
+      query: normalized,
+      autoUse: isConfident,
+      warning:
+        results.length && !isConfident
+          ? 'Encontrei pontos parecidos, mas a busca esta ambigua demais para mover o mapa automaticamente.'
+          : null,
+      results: results.map((candidate) => ({
+        ...candidate,
+        isConfident: candidate.matchScore >= 10 && candidateMatchesAllQueryNumbers(candidate, normalized)
+      }))
+    };
+  });
 }
 
 async function serveStatic(requestPath, response) {
