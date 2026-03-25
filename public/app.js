@@ -84,7 +84,8 @@ const appState = {
   basemapMode: 'satellite',
   nationalLayerEnabled: true,
   nationalLayerViewportKey: null,
-  nationalLayerRequestId: 0
+  nationalLayerRequestId: 0,
+  searchMask: null
 };
 const coverageState = {
   config: null,
@@ -232,29 +233,46 @@ function formatCoordinates(lat, lon) {
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 }
 
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const toRad = (value) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.asin(Math.sqrt(a));
+}
+
+function getStationAsset(operator) {
+  if (operator === 'TIM') {
+    return '/assets/map/antenna-tim.svg';
+  }
+
+  if (operator === 'VIVO') {
+    return '/assets/map/antenna-vivo.svg';
+  }
+
+  return '/assets/map/antenna-tim.svg';
+}
+
 function buildStationIcon(operator, groupedCount = 1, variant = 'search') {
   const operatorClass = operator === 'TIM' ? 'tim' : operator === 'VIVO' ? 'vivo' : 'mix';
 
   return L.divIcon({
     className: `station-icon-shell station-icon-shell--${variant}`,
     html: `
-      <div class="station-icon station-icon--${operatorClass}">
+      <div class="station-icon station-icon--${operatorClass} station-icon--${variant}">
+        <img class="station-icon__image" src="${getStationAsset(operator)}" alt="Antena ${escapeHtml(operator)}">
         ${groupedCount > 1 ? `<span class="station-icon__count">${groupedCount}</span>` : ''}
-        <span class="station-icon__frame"></span>
-        <span class="station-icon__mast"></span>
-        <span class="station-icon__cross"></span>
-        <span class="station-icon__leg station-icon__leg--left"></span>
-        <span class="station-icon__leg station-icon__leg--right"></span>
-        <span class="station-icon__wave station-icon__wave--left"></span>
-        <span class="station-icon__wave station-icon__wave--right"></span>
-        <span class="station-icon__wave station-icon__wave--left station-icon__wave--outer"></span>
-        <span class="station-icon__wave station-icon__wave--right station-icon__wave--outer"></span>
       </div>
     `,
-    iconSize: [34, 56],
-    iconAnchor: [17, 52],
-    popupAnchor: [0, -44],
-    tooltipAnchor: [0, -38]
+    iconSize: [44, 72],
+    iconAnchor: [22, 64],
+    popupAnchor: [0, -56],
+    tooltipAnchor: [0, -54]
   });
 }
 
@@ -419,7 +437,8 @@ async function getJson(url) {
   const payload = await response.json();
 
   if (!response.ok) {
-    throw new Error(payload.error || 'Falha ao consultar o backend.');
+    const detail = payload.details ? ` ${payload.details}` : '';
+    throw new Error(`${payload.error || 'Falha ao consultar o backend.'}${detail}`);
   }
 
   return payload;
@@ -532,10 +551,43 @@ function buildViewportKey() {
   ].join('|');
 }
 
+function buildSearchMask(result) {
+  if (!result?.center?.lat || !result?.center?.lon) {
+    return null;
+  }
+
+  if (result.radiusKm) {
+    return {
+      kind: 'radius',
+      lat: result.center.lat,
+      lon: result.center.lon,
+      radiusKm: result.radiusKm
+    };
+  }
+
+  return {
+    kind: 'point',
+    lat: result.center.lat,
+    lon: result.center.lon,
+    radiusKm: 0.35
+  };
+}
+
+function isInsideSearchMask(item) {
+  const mask = appState.searchMask;
+  if (!mask || !Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) {
+    return false;
+  }
+
+  return haversineKm(mask.lat, mask.lon, item.latitude, item.longitude) <= mask.radiusKm;
+}
+
 function renderNationalLayer(payload) {
   telecoCareLayer.clearLayers();
 
-  payload.items.forEach((item) => {
+  payload.items
+    .filter((item) => !isInsideSearchMask(item))
+    .forEach((item) => {
     if (!Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) {
       return;
     }
@@ -575,7 +627,7 @@ function renderNationalLayer(payload) {
       opacity: 0.94
     });
     marker.addTo(telecoCareLayer);
-  });
+    });
 }
 
 async function refreshNationalLayer(force = false) {
@@ -933,6 +985,54 @@ function renderMap(result, label = 'Centro da busca') {
   }
 }
 
+function previewGeocodedLocation(lat, lon, radiusKm, label) {
+  clearMap();
+
+  const centerMarker = L.circleMarker([lat, lon], {
+    pane: 'centerPane',
+    radius: 9,
+    color: '#f8fcff',
+    fillColor: '#ffb347',
+    fillOpacity: 1,
+    weight: 2.4,
+    className: 'center-marker'
+  })
+    .bindPopup(`<strong>${escapeHtml(label)}</strong>`)
+    .addTo(centerLayer);
+
+  if (radiusKm > 0) {
+    const searchCircle = L.circle([lat, lon], {
+      pane: 'centerPane',
+      radius: radiusKm * 1000,
+      color: '#ffb347',
+      weight: 1.6,
+      fillOpacity: 0.06,
+      className: 'center-radius'
+    }).addTo(centerLayer);
+
+    requestAnimationFrame(() => {
+      refreshMapLayout();
+      map.fitBounds(searchCircle.getBounds().pad(0.12), {
+        animate: false,
+        padding: [24, 24]
+      });
+      refreshMapLayout(160);
+    });
+  } else {
+    requestAnimationFrame(() => {
+      refreshMapLayout();
+      map.setView([lat, lon], 16, {
+        animate: false
+      });
+      refreshMapLayout(160);
+    });
+  }
+
+  centerMarker.openPopup();
+  searchMeta.textContent = `${label} | localizando...`;
+  scheduleNationalLayerRefresh(true, 180);
+}
+
 function renderSummary(result) {
   const timCount = result.operatorSummary.TIM || 0;
   const vivoCount = result.operatorSummary.VIVO || 0;
@@ -1139,6 +1239,7 @@ async function loadCoverage(lat, lon) {
 
 function renderSearch(result, label) {
   refreshSearchButton.disabled = !appState.currentRequest;
+  appState.searchMask = buildSearchMask(result);
   renderMap(result, label);
   scheduleNationalLayerRefresh(true, 260);
   renderSummary(result);
@@ -1241,6 +1342,12 @@ function renderGeocodeResults(payload, radiusKm) {
 
   geocodeResults.querySelectorAll('.use-geocode').forEach((button) => {
     button.addEventListener('click', async () => {
+      previewGeocodedLocation(
+        Number(button.dataset.lat),
+        Number(button.dataset.lon),
+        Number(button.dataset.radius),
+        button.dataset.label
+      );
       await searchByRadius(
         Number(button.dataset.lat),
         Number(button.dataset.lon),
@@ -1407,6 +1514,7 @@ document.querySelector('#geocode-form').addEventListener('submit', async (event)
     const first = payload.results?.[0];
 
     if (first?.lat !== null && first?.lon !== null) {
+      previewGeocodedLocation(first.lat, first.lon, radiusKm, first.displayName || first.label || query);
       await searchByRadius(first.lat, first.lon, radiusKm, first.displayName || first.label || query);
     } else {
       setFeedback('Nao foi possivel transformar essa busca em coordenadas.', 'error');

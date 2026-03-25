@@ -8,9 +8,6 @@ import XLSX from 'xlsx';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, 'public');
-const dataDir = process.env.MAPA_SINAL_DATA_DIR
-  ? path.resolve(process.env.MAPA_SINAL_DATA_DIR)
-  : path.join(__dirname, 'data');
 const defaultPort = Number(process.env.PORT || 4042);
 
 const USER_AGENT = 'Mapa Sinal BR/0.1';
@@ -27,14 +24,6 @@ const ABRTELECOM_URL = 'https://consultanumero.abrtelecom.com.br/consultanumero/
 const VIACEP_URL = 'https://viacep.com.br/ws';
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const GITHUB_API_URL = 'https://api.github.com/repos';
-const TELECOCARE_CACHE_DIR = path.join(dataDir, 'telecocare-cache');
-const TELECOCARE_DATA_FILE = path.join(TELECOCARE_CACHE_DIR, 'ERBs.xlsx');
-const TELECOCARE_METADATA_FILE = path.join(TELECOCARE_CACHE_DIR, 'metadata.json');
-const TELECOCARE_FALLBACK_FILES = [
-  path.join(__dirname, 'data', 'telecocare-unpacked', 'ERBs Jan26.xlsx'),
-  path.join(__dirname, 'data', 'ERBs Jan26.xlsx'),
-  TELECOCARE_DATA_FILE
-];
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 const ANATEL_PAGE_TIMEOUT_MS = 9000;
 const ANATEL_RADIUS_TIME_BUDGET_MS = 12000;
@@ -193,6 +182,31 @@ function normalizeHeaderName(value = '') {
     .replace(/[^A-Za-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .toLowerCase();
+}
+
+function getDataDir() {
+  return process.env.MAPA_SINAL_DATA_DIR
+    ? path.resolve(process.env.MAPA_SINAL_DATA_DIR)
+    : path.join(__dirname, 'data');
+}
+
+function getTelecoCarePaths() {
+  const dataDir = getDataDir();
+  const cacheDir = path.join(dataDir, 'telecocare-cache');
+  const workbookFile = path.join(cacheDir, 'ERBs.xlsx');
+  const metadataFile = path.join(cacheDir, 'metadata.json');
+
+  return {
+    dataDir,
+    cacheDir,
+    workbookFile,
+    metadataFile,
+    fallbackFiles: [
+      path.join(__dirname, 'data', 'telecocare-unpacked', 'ERBs Jan26.xlsx'),
+      path.join(__dirname, 'data', 'ERBs Jan26.xlsx'),
+      workbookFile
+    ]
+  };
 }
 
 function toNumber(value) {
@@ -617,7 +631,9 @@ function parseTelecoCareZipUrl(html = '') {
 }
 
 async function ensureTelecoCareWorkbook() {
-  for (const candidate of TELECOCARE_FALLBACK_FILES) {
+  const telecoCarePaths = getTelecoCarePaths();
+
+  for (const candidate of telecoCarePaths.fallbackFiles) {
     if (await fileExists(candidate)) {
       const fileStats = await stat(candidate);
       return {
@@ -629,7 +645,7 @@ async function ensureTelecoCareWorkbook() {
     }
   }
 
-  await mkdir(TELECOCARE_CACHE_DIR, { recursive: true });
+  await mkdir(telecoCarePaths.cacheDir, { recursive: true });
   const html = await requestText(TELECOCARE_URL);
   const zipUrl = parseTelecoCareZipUrl(html);
 
@@ -648,7 +664,7 @@ async function ensureTelecoCareWorkbook() {
   }
 
   const workbookBuffer = workbookEntry.getData();
-  await writeFile(TELECOCARE_DATA_FILE, workbookBuffer);
+  await writeFile(telecoCarePaths.workbookFile, workbookBuffer);
 
   const metadata = {
     source: TELECOCARE_URL,
@@ -657,10 +673,10 @@ async function ensureTelecoCareWorkbook() {
     zipBytes: zipResponse.content.length,
     workbookFile: path.basename(workbookEntry.entryName)
   };
-  await writeFile(TELECOCARE_METADATA_FILE, JSON.stringify(metadata, null, 2));
+  await writeFile(telecoCarePaths.metadataFile, JSON.stringify(metadata, null, 2));
 
   return {
-    workbookPath: TELECOCARE_DATA_FILE,
+    workbookPath: telecoCarePaths.workbookFile,
     zipUrl,
     fileUpdatedAt: metadata.downloadedAt,
     downloadedAt: metadata.downloadedAt
@@ -1418,19 +1434,42 @@ async function geocodeCep(cep) {
     throw new Error('CEP nao encontrado.');
   }
 
-  const query = [viaCep.logradouro, viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil', viaCep.cep]
-    .filter(Boolean)
-    .join(', ');
+  const queries = [
+    [viaCep.logradouro, viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil', viaCep.cep],
+    [viaCep.logradouro, viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil'],
+    [viaCep.logradouro, viaCep.localidade, viaCep.uf, 'Brasil'],
+    [viaCep.bairro, viaCep.localidade, viaCep.uf, 'Brasil'],
+    [viaCep.localidade, viaCep.uf, 'Brasil', viaCep.cep],
+    [viaCep.localidade, viaCep.uf, 'Brasil']
+  ]
+    .map((parts) => parts.filter(Boolean).join(', '))
+    .filter(Boolean);
 
-  const matches = await geocodeFreeText(query, 1);
-  const first = matches[0];
+  let first = null;
+  let displayName = queries[0] || `${viaCep.localidade}/${viaCep.uf}`;
+
+  for (const query of queries) {
+    const matches = await geocodeFreeText(query, 1);
+    const candidate = matches[0] || null;
+
+    if (candidate && Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon)) {
+      first = candidate;
+      displayName = candidate.displayName || query;
+      break;
+    }
+
+    if (!first && candidate) {
+      first = candidate;
+      displayName = candidate.displayName || query;
+    }
+  }
 
   return {
     query: cleanCep,
     results: [
       {
         label: `${viaCep.logradouro || 'CEP'} - ${viaCep.localidade}/${viaCep.uf}`,
-        displayName: first?.displayName || query,
+        displayName,
         lat: first?.lat ?? null,
         lon: first?.lon ?? null,
         source: 'viacep+nominatim',

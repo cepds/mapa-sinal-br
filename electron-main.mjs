@@ -1,13 +1,13 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startMapaSinalServer } from './server.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow = null;
 let localServer = null;
+let startMapaSinalServer = null;
 
 function revealMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
@@ -17,6 +17,9 @@ function revealMainWindow() {
 
 async function createMainWindow() {
   process.env.MAPA_SINAL_DATA_DIR = path.join(app.getPath('userData'), 'data');
+  if (!startMapaSinalServer) {
+    ({ startMapaSinalServer } = await import('./server.mjs'));
+  }
   localServer = await startMapaSinalServer(0);
   const address = localServer.address();
   const port = typeof address === 'object' && address ? address.port : 4042;

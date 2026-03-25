@@ -1086,6 +1086,37 @@ tbody tr:hover {
     0 0 18px rgba(255, 138, 26, 0.2);
 }
 
+.station-icon {
+  width: 44px;
+  height: 72px;
+}
+
+.station-icon__image {
+  display: block;
+  width: 44px;
+  height: 72px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.34));
+}
+
+.station-icon--search .station-icon__image {
+  transform: translateY(-2px);
+}
+
+.station-icon--national .station-icon__image {
+  transform: translateY(-1px) scale(0.96);
+  opacity: 0.96;
+}
+
+.station-icon__count {
+  top: 2px;
+  right: -6px;
+  min-width: 20px;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+}
+
 .tower-popup-shell .leaflet-popup-content-wrapper {
   border-radius: 18px;
   background: rgba(9, 15, 19, 0.98);
