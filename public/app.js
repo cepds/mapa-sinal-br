@@ -758,7 +758,7 @@ function renderCoverageMapStatus(message = null) {
 function buildCoverageTileLayer(operator, technologyKey) {
   const isTim = operator === 'tim';
   const pane = isTim ? 'timCoveragePane' : 'vivoCoveragePane';
-  const opacity = isTim ? 0.76 : 0.72;
+  const opacity = isTim ? 0.88 : 0.92;
   const layer = L.tileLayer(`/api/coverage/${operator}/${technologyKey}/{z}/{x}/{y}.png`, {
     pane,
     opacity,

@@ -934,15 +934,15 @@ tbody tr:hover {
 }
 
 .leaflet-pane.coverage-pane {
-  mix-blend-mode: screen;
+  mix-blend-mode: normal;
 }
 
 .leaflet-pane.coverage-pane--tim {
-  filter: saturate(2.25) hue-rotate(142deg) contrast(1.22) brightness(1.08);
+  filter: saturate(1.55) contrast(1.1) brightness(1.08);
 }
 
 .leaflet-pane.coverage-pane--vivo {
-  filter: saturate(2.15) hue-rotate(-34deg) contrast(1.18) brightness(1.06);
+  filter: saturate(1.7) contrast(1.12) brightness(1.12);
 }
 
 .leaflet-pane.coverage-pane img {

@@ -836,7 +836,11 @@ function getTelecoCareClusterStep(zoom) {
   if (zoom <= 6) return 0.65;
   if (zoom <= 7) return 0.36;
   if (zoom <= 8) return 0.18;
-  return 0.1;
+  if (zoom <= 9) return 0.12;
+  if (zoom <= 10) return 0.08;
+  if (zoom <= 11) return 0.05;
+  if (zoom <= 12) return 0.03;
+  return 0.018;
 }
 
 function clusterTelecoCareStations(stations, zoom) {
@@ -898,7 +902,8 @@ async function fetchTelecoCareViewport(bounds, zoom, limit = 2500) {
   const dataset = await getTelecoCareDataset();
   const stations = dataset.stations.filter((station) => isInsideBounds(station, bounds));
   const operatorSummary = summarizeStationsByOperator(stations);
-  const useClusters = zoom < 9 || stations.length > limit;
+  const stationCap = zoom >= 15 ? 1800 : zoom >= 14 ? 1200 : 700;
+  const useClusters = zoom < 13 || stations.length > stationCap;
   const items = useClusters ? clusterTelecoCareStations(stations, zoom) : stations.map((station) => ({
     kind: 'station',
     ...station
