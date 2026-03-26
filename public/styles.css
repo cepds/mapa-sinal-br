@@ -575,8 +575,95 @@ select:focus {
   grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.92fr);
 }
 
-#map {
-  min-height: 540px;
+.map-wall-card {
+  padding-bottom: 28px;
+}
+
+.map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.map-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(170, 205, 226, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(255, 154, 61, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(7, 18, 26, 0.96), rgba(5, 14, 21, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.map-panel--antennas {
+  background:
+    radial-gradient(circle at top right, rgba(45, 131, 255, 0.1), transparent 26%),
+    linear-gradient(180deg, rgba(7, 18, 26, 0.96), rgba(5, 14, 21, 0.92));
+}
+
+.map-panel--vivo {
+  background:
+    radial-gradient(circle at top right, rgba(255, 138, 31, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(7, 18, 26, 0.96), rgba(5, 14, 21, 0.92));
+}
+
+.map-panel--tim {
+  background:
+    radial-gradient(circle at top right, rgba(0, 94, 255, 0.14), transparent 26%),
+    linear-gradient(180deg, rgba(7, 18, 26, 0.96), rgba(5, 14, 21, 0.92));
+}
+
+.map-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.map-panel__head h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.26rem;
+  letter-spacing: -0.03em;
+}
+
+.map-panel__copy {
+  margin: 0;
+  max-width: 30ch;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.map-panel__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(170, 205, 226, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e9f4fa;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.map-panel__badge--vivo {
+  color: #ffd8b5;
+  background: rgba(255, 138, 31, 0.14);
+  border-color: rgba(255, 138, 31, 0.22);
+}
+
+.map-panel__badge--tim {
+  color: #dce9ff;
+  background: rgba(0, 94, 255, 0.16);
+  border-color: rgba(0, 94, 255, 0.22);
+}
+
+.map-canvas {
+  min-height: 380px;
   border-radius: 20px;
   overflow: hidden;
   border: 1px solid rgba(170, 205, 226, 0.14);
@@ -586,6 +673,10 @@ select:focus {
   margin-top: 14px;
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.legend--soft {
+  color: rgba(220, 236, 246, 0.76);
 }
 
 .dot {
@@ -1218,6 +1309,10 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .map-grid {
+    grid-template-columns: 1fr;
+  }
+
   .monitor-status-grid,
   .coverage-telemetry-grid {
     grid-template-columns: 1fr;
@@ -1250,7 +1345,7 @@ tbody tr:hover {
     align-items: stretch;
   }
 
-  #map {
+  .map-canvas {
     min-height: 420px;
   }
 }
@@ -1456,5 +1551,13 @@ tbody tr:hover {
   .map-status-pill {
     width: 100%;
     justify-content: center;
+  }
+
+  .map-panel__head {
+    flex-direction: column;
+  }
+
+  .map-panel__badge {
+    align-self: flex-start;
   }
 }

@@ -122,84 +122,126 @@
           <div id="geocode-results" class="geocode-results"></div>
         </section>
 
-        <section class="map-layout">
-          <article class="card map-card">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Mapa</p>
-                <h2>Visualizacao da busca</h2>
-              </div>
-              <div id="search-meta" class="meta-chip">Nenhuma busca executada</div>
+        <section class="card map-wall-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Mapas</p>
+              <h2>Painel sincronizado da busca</h2>
             </div>
-            <div class="map-toolbar">
-              <div id="basemap-controls" class="segmented-control" role="group" aria-label="Camada base do mapa">
-                <button class="segment-button is-active" type="button" data-basemap="satellite">Satelite</button>
-                <button class="segment-button" type="button" data-basemap="street">Ruas</button>
-              </div>
-              <label class="map-toggle">
-                <input id="national-layer-enabled" type="checkbox" checked>
-                <span>Torres do Brasil</span>
-              </label>
-              <div id="national-layer-status" class="map-status-pill is-loading">Preparando camada Brasil...</div>
+            <div id="search-meta" class="meta-chip">Nenhuma busca executada</div>
+          </div>
+          <div class="map-toolbar">
+            <div id="basemap-controls" class="segmented-control" role="group" aria-label="Camada base dos mapas">
+              <button class="segment-button is-active" type="button" data-basemap="satellite">Satelite</button>
+              <button class="segment-button" type="button" data-basemap="street">Ruas</button>
             </div>
-            <div id="map"></div>
-            <div class="legend">
-              <span><i class="dot dot-center"></i>Centro</span>
-              <span><i class="dot dot-tim"></i>TIM</span>
-              <span><i class="dot dot-vivo"></i>Vivo</span>
-            </div>
-          </article>
-
-          <article class="card summary-card network-monitor-card">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Monitor</p>
-                <h2>Painel de cobertura oficial</h2>
-              </div>
-              <div class="monitor-badge-strip">
-                <span class="monitor-badge is-live">Ao vivo</span>
-                <span class="monitor-badge">TIM e Vivo</span>
-              </div>
-            </div>
-            <div id="coverage-map-controls" class="coverage-map-controls">
-              <article class="coverage-operator-card coverage-operator-card--tim">
-                <div class="coverage-operator-head">
-                  <div class="coverage-operator-meta">
-                    <label class="coverage-toggle">
-                      <input id="tim-coverage-enabled" type="checkbox" checked>
-                      <span>TIM</span>
-                    </label>
-                    <p class="coverage-operator-copy">Camada oficial no mapa com troca rapida de tecnologia.</p>
-                  </div>
-                  <span class="chip">Mapa</span>
+            <label class="map-toggle">
+              <input id="national-layer-enabled" type="checkbox" checked>
+              <span>Torres do Brasil no mapa de antenas</span>
+            </label>
+            <div id="national-layer-status" class="map-status-pill is-loading">Preparando camada Brasil...</div>
+          </div>
+          <div class="map-grid">
+            <article class="map-panel map-panel--antennas">
+              <div class="map-panel__head">
+                <div>
+                  <p class="eyebrow">Painel 1</p>
+                  <h3>Antenas</h3>
+                  <p class="map-panel__copy">Somente ERBs da busca atual, com a camada nacional opcional.</p>
                 </div>
-                <div id="tim-tech-grid" class="tech-button-grid"></div>
-              </article>
+                <span class="map-panel__badge">TIM + Vivo</span>
+              </div>
+              <div id="map-antennas" class="map-canvas"></div>
+              <div class="legend">
+                <span><i class="dot dot-center"></i>Centro</span>
+                <span><i class="dot dot-tim"></i>TIM</span>
+                <span><i class="dot dot-vivo"></i>Vivo</span>
+              </div>
+            </article>
 
-              <article class="coverage-operator-card coverage-operator-card--vivo">
-                <div class="coverage-operator-head">
-                  <div class="coverage-operator-meta">
-                    <label class="coverage-toggle">
-                      <input id="vivo-coverage-enabled" type="checkbox" checked>
-                      <span>Vivo</span>
-                    </label>
-                    <p class="coverage-operator-copy">Mapa oficial e leitura por ponto central da busca.</p>
-                  </div>
-                  <span class="chip">Mapa + ponto</span>
+            <article class="map-panel map-panel--vivo">
+              <div class="map-panel__head">
+                <div>
+                  <p class="eyebrow">Painel 2</p>
+                  <h3>Cobertura Vivo</h3>
+                  <p class="map-panel__copy">Mapa dedicado para a cobertura oficial da Vivo no mesmo ponto pesquisado.</p>
                 </div>
-                <div id="vivo-tech-grid" class="tech-button-grid"></div>
-              </article>
+                <span class="map-panel__badge map-panel__badge--vivo">Vivo</span>
+              </div>
+              <div id="map-vivo" class="map-canvas"></div>
+              <div class="legend legend--soft">
+                <span><i class="dot dot-center"></i>Centro</span>
+                <span><i class="dot dot-vivo"></i>Cobertura Vivo</span>
+              </div>
+            </article>
+
+            <article class="map-panel map-panel--tim">
+              <div class="map-panel__head">
+                <div>
+                  <p class="eyebrow">Painel 3</p>
+                  <h3>Cobertura TIM</h3>
+                  <p class="map-panel__copy">Mapa dedicado para a cobertura oficial da TIM, sincronizado com a busca.</p>
+                </div>
+                <span class="map-panel__badge map-panel__badge--tim">TIM</span>
+              </div>
+              <div id="map-tim" class="map-canvas"></div>
+              <div class="legend legend--soft">
+                <span><i class="dot dot-center"></i>Centro</span>
+                <span><i class="dot dot-tim"></i>Cobertura TIM</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="card summary-card network-monitor-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Monitor</p>
+              <h2>Painel de cobertura oficial</h2>
             </div>
-            <div id="coverage-map-status" class="coverage-map-status">
-              Carregando controles de cobertura oficial...
+            <div class="monitor-badge-strip">
+              <span class="monitor-badge is-live">Ao vivo</span>
+              <span class="monitor-badge">TIM e Vivo</span>
             </div>
-            <div id="summary-cards" class="summary-cards">
-              <div class="placeholder-box">Os indicadores aparecem aqui depois da primeira busca.</div>
-            </div>
-            <div id="coverage-panel" class="coverage-panel">
-              <div class="placeholder-box">A cobertura oficial da Vivo aparece aqui para o centro da busca.</div>
-            </div>
-          </article>
+          </div>
+          <div id="coverage-map-controls" class="coverage-map-controls">
+            <article class="coverage-operator-card coverage-operator-card--tim">
+              <div class="coverage-operator-head">
+                <div class="coverage-operator-meta">
+                  <label class="coverage-toggle">
+                    <input id="tim-coverage-enabled" type="checkbox" checked>
+                    <span>TIM</span>
+                  </label>
+                  <p class="coverage-operator-copy">Liga ou pausa o mapa dedicado da TIM e troca a tecnologia exibida.</p>
+                </div>
+                <span class="chip">Mapa TIM</span>
+              </div>
+              <div id="tim-tech-grid" class="tech-button-grid"></div>
+            </article>
+
+            <article class="coverage-operator-card coverage-operator-card--vivo">
+              <div class="coverage-operator-head">
+                <div class="coverage-operator-meta">
+                  <label class="coverage-toggle">
+                    <input id="vivo-coverage-enabled" type="checkbox" checked>
+                    <span>Vivo</span>
+                  </label>
+                  <p class="coverage-operator-copy">Liga ou pausa o mapa dedicado da Vivo e a leitura por ponto central.</p>
+                </div>
+                <span class="chip">Mapa Vivo + ponto</span>
+              </div>
+              <div id="vivo-tech-grid" class="tech-button-grid"></div>
+            </article>
+          </div>
+          <div id="coverage-map-status" class="coverage-map-status">
+            Carregando controles de cobertura oficial...
+          </div>
+          <div id="summary-cards" class="summary-cards">
+            <div class="placeholder-box">Os indicadores aparecem aqui depois da primeira busca.</div>
+          </div>
+          <div id="coverage-panel" class="coverage-panel">
+            <div class="placeholder-box">A cobertura oficial da Vivo aparece aqui para o centro da busca.</div>
+          </div>
         </section>
 
         <section class="card">
@@ -208,6 +250,7 @@
               <p class="eyebrow">Antenas</p>
               <h2>Estacoes encontradas</h2>
             </div>
+            <div id="stations-meta" class="meta-chip">Somente a busca atual</div>
           </div>
           <div id="stations-table" class="table-wrapper">
             <div class="placeholder-box">Nenhuma estacao carregada ainda.</div>

@@ -22,52 +22,11 @@ const basemapControls = document.querySelector('#basemap-controls');
 const nationalLayerEnabledInput = document.querySelector('#national-layer-enabled');
 const nationalLayerStatus = document.querySelector('#national-layer-status');
 const stationsTable = document.querySelector('#stations-table');
+const stationsMeta = document.querySelector('#stations-meta');
 const sourcesDetails = document.querySelector('#sources-details');
 const sourcesMeta = document.querySelector('#sources-meta');
 const sourcesGrid = document.querySelector('#sources-grid');
 
-const map = L.map('map').setView([-23.5504, -46.6339], 12);
-const streetBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '&copy; OpenStreetMap contributors'
-});
-const satelliteBaseLayer = L.tileLayer(
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  {
-    maxZoom: 19,
-    attribution: 'Tiles &copy; Esri'
-  }
-);
-const satelliteLabelsLayer = L.tileLayer(
-  'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-  {
-    maxZoom: 19,
-    attribution: 'Labels &copy; Esri',
-    pane: 'overlayPane'
-  }
-);
-satelliteBaseLayer.addTo(map);
-satelliteLabelsLayer.addTo(map);
-
-map.createPane('timCoveragePane');
-map.getPane('timCoveragePane').style.zIndex = '260';
-map.getPane('timCoveragePane').classList.add('coverage-pane', 'coverage-pane--tim');
-map.createPane('vivoCoveragePane');
-map.getPane('vivoCoveragePane').style.zIndex = '270';
-map.getPane('vivoCoveragePane').classList.add('coverage-pane', 'coverage-pane--vivo');
-map.createPane('stationsPane');
-map.getPane('stationsPane').style.zIndex = '640';
-map.getPane('stationsPane').classList.add('stations-pane');
-map.createPane('telecoCarePane');
-map.getPane('telecoCarePane').style.zIndex = '620';
-map.getPane('telecoCarePane').classList.add('telecocare-pane');
-map.createPane('centerPane');
-map.getPane('centerPane').style.zIndex = '650';
-map.getPane('centerPane').classList.add('center-pane');
-
-const centerLayer = L.layerGroup().addTo(map);
-const telecoCareLayer = L.layerGroup().addTo(map);
-const stationsLayer = L.layerGroup().addTo(map);
 const SEARCH_STORAGE_KEY = 'mapa-sinal-br:last-search';
 const DEFAULT_BOOTSTRAP_SEARCH = {
   kind: 'radius',
@@ -76,6 +35,86 @@ const DEFAULT_BOOTSTRAP_SEARCH = {
   radiusKm: 3,
   label: 'Centro de Sao Paulo/SP'
 };
+const DEFAULT_MAP_VIEW = {
+  lat: DEFAULT_BOOTSTRAP_SEARCH.lat,
+  lon: DEFAULT_BOOTSTRAP_SEARCH.lon,
+  zoom: 12
+};
+
+function createBaseLayers() {
+  return {
+    streetBaseLayer: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }),
+    satelliteBaseLayer: L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri'
+      }
+    ),
+    satelliteLabelsLayer: L.tileLayer(
+      'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 19,
+        attribution: 'Labels &copy; Esri',
+        pane: 'overlayPane'
+      }
+    )
+  };
+}
+
+function createMapView(elementId, kind) {
+  const mapInstance = L.map(elementId, {
+    zoomControl: true,
+    preferCanvas: true
+  }).setView([DEFAULT_MAP_VIEW.lat, DEFAULT_MAP_VIEW.lon], DEFAULT_MAP_VIEW.zoom);
+  const baseLayers = createBaseLayers();
+  baseLayers.satelliteBaseLayer.addTo(mapInstance);
+  baseLayers.satelliteLabelsLayer.addTo(mapInstance);
+
+  mapInstance.createPane('centerPane');
+  mapInstance.getPane('centerPane').style.zIndex = '650';
+  mapInstance.getPane('centerPane').classList.add('center-pane');
+
+  const view = {
+    key: kind,
+    map: mapInstance,
+    baseLayers,
+    centerLayer: L.layerGroup().addTo(mapInstance),
+    stationsLayer: null,
+    telecoCareLayer: null,
+    coverageLayer: null
+  };
+
+  if (kind === 'antennas') {
+    mapInstance.createPane('stationsPane');
+    mapInstance.getPane('stationsPane').style.zIndex = '640';
+    mapInstance.getPane('stationsPane').classList.add('stations-pane');
+    mapInstance.createPane('telecoCarePane');
+    mapInstance.getPane('telecoCarePane').style.zIndex = '620';
+    mapInstance.getPane('telecoCarePane').classList.add('telecocare-pane');
+    view.stationsLayer = L.layerGroup().addTo(mapInstance);
+    view.telecoCareLayer = L.layerGroup().addTo(mapInstance);
+  }
+
+  if (kind === 'vivo' || kind === 'tim') {
+    mapInstance.createPane('coveragePane');
+    mapInstance.getPane('coveragePane').style.zIndex = '260';
+    mapInstance.getPane('coveragePane').classList.add(
+      'coverage-pane',
+      kind === 'tim' ? 'coverage-pane--tim' : 'coverage-pane--vivo'
+    );
+  }
+
+  return view;
+}
+
+const antennaView = createMapView('map-antennas', 'antennas');
+const vivoView = createMapView('map-vivo', 'vivo');
+const timView = createMapView('map-tim', 'tim');
+const mapViews = [antennaView, vivoView, timView];
 
 const appState = {
   municipiosByUf: new Map(),
@@ -499,8 +538,8 @@ async function loadMunicipios(uf) {
 }
 
 function clearMap() {
-  centerLayer.clearLayers();
-  stationsLayer.clearLayers();
+  mapViews.forEach((view) => view.centerLayer.clearLayers());
+  antennaView.stationsLayer?.clearLayers();
 }
 
 function refreshMapLayout(delay = 0) {
@@ -509,7 +548,9 @@ function refreshMapLayout(delay = 0) {
   }
 
   pendingMapRefresh = setTimeout(() => {
-    map.invalidateSize({ animate: false, pan: false });
+    mapViews.forEach((view) => {
+      view.map.invalidateSize({ animate: false, pan: false });
+    });
     pendingMapRefresh = null;
   }, delay);
 }
@@ -523,15 +564,19 @@ function setNationalLayerStatus(message, tone = 'idle') {
 function setBasemap(mode) {
   appState.basemapMode = mode;
 
-  if (mode === 'street') {
-    if (map.hasLayer(satelliteBaseLayer)) map.removeLayer(satelliteBaseLayer);
-    if (map.hasLayer(satelliteLabelsLayer)) map.removeLayer(satelliteLabelsLayer);
-    if (!map.hasLayer(streetBaseLayer)) streetBaseLayer.addTo(map);
-  } else {
-    if (map.hasLayer(streetBaseLayer)) map.removeLayer(streetBaseLayer);
-    if (!map.hasLayer(satelliteBaseLayer)) satelliteBaseLayer.addTo(map);
-    if (!map.hasLayer(satelliteLabelsLayer)) satelliteLabelsLayer.addTo(map);
-  }
+  mapViews.forEach((view) => {
+    const { map, baseLayers } = view;
+
+    if (mode === 'street') {
+      if (map.hasLayer(baseLayers.satelliteBaseLayer)) map.removeLayer(baseLayers.satelliteBaseLayer);
+      if (map.hasLayer(baseLayers.satelliteLabelsLayer)) map.removeLayer(baseLayers.satelliteLabelsLayer);
+      if (!map.hasLayer(baseLayers.streetBaseLayer)) baseLayers.streetBaseLayer.addTo(map);
+    } else {
+      if (map.hasLayer(baseLayers.streetBaseLayer)) map.removeLayer(baseLayers.streetBaseLayer);
+      if (!map.hasLayer(baseLayers.satelliteBaseLayer)) baseLayers.satelliteBaseLayer.addTo(map);
+      if (!map.hasLayer(baseLayers.satelliteLabelsLayer)) baseLayers.satelliteLabelsLayer.addTo(map);
+    }
+  });
 
   basemapControls?.querySelectorAll('[data-basemap]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.basemap === mode);
@@ -539,8 +584,8 @@ function setBasemap(mode) {
 }
 
 function buildViewportKey() {
-  const bounds = map.getBounds();
-  const zoom = map.getZoom();
+  const bounds = antennaView.map.getBounds();
+  const zoom = antennaView.map.getZoom();
 
   return [
     zoom,
@@ -583,7 +628,7 @@ function isInsideSearchMask(item) {
 }
 
 function renderNationalLayer(payload) {
-  telecoCareLayer.clearLayers();
+  antennaView.telecoCareLayer.clearLayers();
 
   payload.items
     .filter((item) => !isInsideSearchMask(item))
@@ -605,7 +650,7 @@ function renderNationalLayer(payload) {
         minWidth: 260,
         autoPanPadding: [24, 24]
       });
-      marker.addTo(telecoCareLayer);
+      marker.addTo(antennaView.telecoCareLayer);
       return;
     }
 
@@ -626,21 +671,21 @@ function renderNationalLayer(payload) {
       offset: [0, -10],
       opacity: 0.94
     });
-    marker.addTo(telecoCareLayer);
+    marker.addTo(antennaView.telecoCareLayer);
     });
 }
 
 async function refreshNationalLayer(force = false) {
   if (!appState.nationalLayerEnabled) {
-    telecoCareLayer.clearLayers();
+    antennaView.telecoCareLayer.clearLayers();
     appState.nationalLayerViewportKey = null;
     setNationalLayerStatus('Camada Brasil desativada', 'idle');
     return;
   }
 
-  const zoom = map.getZoom();
+  const zoom = antennaView.map.getZoom();
   if (zoom < 4) {
-    telecoCareLayer.clearLayers();
+    antennaView.telecoCareLayer.clearLayers();
     appState.nationalLayerViewportKey = null;
     setNationalLayerStatus('Aproxime o mapa para carregar o Brasil', 'idle');
     return;
@@ -651,7 +696,7 @@ async function refreshNationalLayer(force = false) {
     return;
   }
 
-  const bounds = map.getBounds();
+  const bounds = antennaView.map.getBounds();
   const requestId = ++appState.nationalLayerRequestId;
   setNationalLayerStatus('Carregando torres do Brasil...', 'loading');
 
@@ -757,10 +802,9 @@ function renderCoverageMapStatus(message = null) {
 
 function buildCoverageTileLayer(operator, technologyKey) {
   const isTim = operator === 'tim';
-  const pane = isTim ? 'timCoveragePane' : 'vivoCoveragePane';
   const opacity = isTim ? 0.88 : 0.92;
   const layer = L.tileLayer(`/api/coverage/${operator}/${technologyKey}/{z}/{x}/{y}.png`, {
-    pane,
+    pane: 'coveragePane',
     opacity,
     className: `coverage-layer coverage-layer--${operator}`,
     maxZoom: 19,
@@ -788,9 +832,10 @@ function buildCoverageTileLayer(operator, technologyKey) {
 }
 
 function replaceCoverageLayer(operator, technologyKey, enabled) {
+  const targetView = operator === 'tim' ? timView : vivoView;
   const currentLayer = coverageState.layers[operator];
   if (currentLayer) {
-    map.removeLayer(currentLayer);
+    targetView.map.removeLayer(currentLayer);
     coverageState.layers[operator] = null;
   }
 
@@ -799,7 +844,7 @@ function replaceCoverageLayer(operator, technologyKey, enabled) {
   }
 
   const layer = buildCoverageTileLayer(operator, technologyKey);
-  layer.addTo(map);
+  layer.addTo(targetView.map);
   coverageState.layers[operator] = layer;
 }
 
@@ -866,6 +911,58 @@ async function initializeCoverageControls() {
   refreshCoverageLayers();
 }
 
+function drawSearchCenterOnView(view, lat, lon, radiusKm, label) {
+  const centerMarker = L.circleMarker([lat, lon], {
+    pane: 'centerPane',
+    radius: 9,
+    color: '#f8fcff',
+    fillColor: '#ffb347',
+    fillOpacity: 1,
+    weight: 2.4,
+    className: 'center-marker'
+  })
+    .bindPopup(`<strong>${escapeHtml(label)}</strong>`)
+    .addTo(view.centerLayer);
+
+  const searchCircle = radiusKm > 0
+    ? L.circle([lat, lon], {
+      pane: 'centerPane',
+      radius: radiusKm * 1000,
+      color: '#ffb347',
+      weight: 1.6,
+      fillOpacity: 0.06,
+      className: 'center-radius'
+    }).addTo(view.centerLayer)
+    : null;
+
+  return {
+    centerMarker,
+    searchCircle
+  };
+}
+
+function applyMapTarget(target) {
+  requestAnimationFrame(() => {
+    refreshMapLayout();
+    mapViews.forEach((view) => {
+      if (target.bounds) {
+        view.map.fitBounds(target.bounds.pad(target.padding ?? 0.12), {
+          animate: false,
+          padding: [24, 24]
+        });
+        return;
+      }
+
+      if (target.center && Number.isFinite(target.zoom)) {
+        view.map.setView([target.center.lat, target.center.lon], target.zoom, {
+          animate: false
+        });
+      }
+    });
+    refreshMapLayout(180);
+  });
+}
+
 function renderMap(result, label = 'Centro da busca') {
   clearMap();
   const layers = [];
@@ -873,30 +970,20 @@ function renderMap(result, label = 'Centro da busca') {
   let preferredBounds = null;
 
   if (result.center?.lat && result.center?.lon) {
-    const centerMarker = L.circleMarker([result.center.lat, result.center.lon], {
-      pane: 'centerPane',
-      radius: 9,
-      color: '#f8fcff',
-      fillColor: '#ffb347',
-      fillOpacity: 1,
-      weight: 2.4,
-      className: 'center-marker'
-    })
-      .bindPopup(`<strong>${escapeHtml(label)}</strong>`)
-      .addTo(centerLayer);
-    layers.push(centerMarker);
+    const antennaSearch = drawSearchCenterOnView(
+      antennaView,
+      result.center.lat,
+      result.center.lon,
+      result.radiusKm,
+      label
+    );
+    drawSearchCenterOnView(vivoView, result.center.lat, result.center.lon, result.radiusKm, label);
+    drawSearchCenterOnView(timView, result.center.lat, result.center.lon, result.radiusKm, label);
+    layers.push(antennaSearch.centerMarker);
 
-    if (result.radiusKm) {
-      const searchCircle = L.circle([result.center.lat, result.center.lon], {
-        pane: 'centerPane',
-        radius: result.radiusKm * 1000,
-        color: '#ffb347',
-        weight: 1.6,
-        fillOpacity: 0.06,
-        className: 'center-radius'
-      }).addTo(centerLayer);
-      preferredBounds = searchCircle.getBounds();
-      layers.push(searchCircle);
+    if (antennaSearch.searchCircle) {
+      preferredBounds = antennaSearch.searchCircle.getBounds();
+      layers.push(antennaSearch.searchCircle);
     }
   }
 
@@ -949,7 +1036,7 @@ function renderMap(result, label = 'Centro da busca') {
       }
     );
 
-    marker.addTo(stationsLayer);
+    marker.addTo(antennaView.stationsLayer);
     layers.push(marker);
   });
 
@@ -957,30 +1044,22 @@ function renderMap(result, label = 'Centro da busca') {
   refreshMapLayout();
 
   if (preferredBounds) {
-    requestAnimationFrame(() => {
-      refreshMapLayout();
-      map.fitBounds(preferredBounds.pad(0.12), {
-        animate: false,
-        padding: [24, 24]
-      });
-      refreshMapLayout(180);
+    applyMapTarget({
+      bounds: preferredBounds,
+      padding: 0.12
     });
   } else if (group.getLayers().length) {
-    requestAnimationFrame(() => {
-      refreshMapLayout();
-      map.fitBounds(group.getBounds().pad(0.14), {
-        animate: false,
-        padding: [24, 24]
-      });
-      refreshMapLayout(180);
+    applyMapTarget({
+      bounds: group.getBounds(),
+      padding: 0.14
     });
   } else if (result.center?.lat && result.center?.lon) {
-    requestAnimationFrame(() => {
-      refreshMapLayout();
-      map.setView([result.center.lat, result.center.lon], 14, {
-        animate: false
-      });
-      refreshMapLayout(180);
+    applyMapTarget({
+      center: {
+        lat: result.center.lat,
+        lon: result.center.lon
+      },
+      zoom: 14
     });
   }
 }
@@ -988,47 +1067,23 @@ function renderMap(result, label = 'Centro da busca') {
 function previewGeocodedLocation(lat, lon, radiusKm, label) {
   clearMap();
 
-  const centerMarker = L.circleMarker([lat, lon], {
-    pane: 'centerPane',
-    radius: 9,
-    color: '#f8fcff',
-    fillColor: '#ffb347',
-    fillOpacity: 1,
-    weight: 2.4,
-    className: 'center-marker'
-  })
-    .bindPopup(`<strong>${escapeHtml(label)}</strong>`)
-    .addTo(centerLayer);
+  const antennaSearch = drawSearchCenterOnView(antennaView, lat, lon, radiusKm, label);
+  drawSearchCenterOnView(vivoView, lat, lon, radiusKm, label);
+  drawSearchCenterOnView(timView, lat, lon, radiusKm, label);
 
-  if (radiusKm > 0) {
-    const searchCircle = L.circle([lat, lon], {
-      pane: 'centerPane',
-      radius: radiusKm * 1000,
-      color: '#ffb347',
-      weight: 1.6,
-      fillOpacity: 0.06,
-      className: 'center-radius'
-    }).addTo(centerLayer);
-
-    requestAnimationFrame(() => {
-      refreshMapLayout();
-      map.fitBounds(searchCircle.getBounds().pad(0.12), {
-        animate: false,
-        padding: [24, 24]
-      });
-      refreshMapLayout(160);
+  if (radiusKm > 0 && antennaSearch.searchCircle) {
+    applyMapTarget({
+      bounds: antennaSearch.searchCircle.getBounds(),
+      padding: 0.12
     });
   } else {
-    requestAnimationFrame(() => {
-      refreshMapLayout();
-      map.setView([lat, lon], 16, {
-        animate: false
-      });
-      refreshMapLayout(160);
+    applyMapTarget({
+      center: { lat, lon },
+      zoom: 16
     });
   }
 
-  centerMarker.openPopup();
+  antennaSearch.centerMarker.openPopup();
   searchMeta.textContent = `${label} | localizando...`;
   scheduleNationalLayerRefresh(true, 180);
 }
@@ -1068,8 +1123,16 @@ function renderSummary(result) {
   `;
 }
 
-function renderStations(result) {
-  if (!result.stations.length) {
+function renderStations(result, label = 'Busca atual') {
+  const stations = [...result.stations].sort((left, right) => {
+    const leftDistance = Number.isFinite(left.distanceKm) ? left.distanceKm : Number.POSITIVE_INFINITY;
+    const rightDistance = Number.isFinite(right.distanceKm) ? right.distanceKm : Number.POSITIVE_INFINITY;
+    return leftDistance - rightDistance;
+  });
+
+  stationsMeta.textContent = `${label} | ${formatMaybeNumber(result.stationsCount)} estacoes`;
+
+  if (!stations.length) {
     stationsTable.innerHTML = '<div class="placeholder-box">Nenhuma estacao TIM/Vivo encontrada para o filtro atual.</div>';
     return;
   }
@@ -1091,7 +1154,7 @@ function renderStations(result) {
         </tr>
       </thead>
       <tbody>
-        ${result.stations.map((station) => `
+        ${stations.map((station) => `
           <tr>
             <td>${buildOperatorPill(station.operator)}</td>
             <td>
@@ -1243,7 +1306,7 @@ function renderSearch(result, label) {
   renderMap(result, label);
   scheduleNationalLayerRefresh(true, 260);
   renderSummary(result);
-  renderStations(result);
+  renderStations(result, label);
   persistCurrentSearch();
   searchMeta.textContent = `${label} | ${formatMaybeDate(result.checkedAt)}`;
   const warningText = Array.isArray(result.warnings) && result.warnings.length
@@ -1554,7 +1617,7 @@ document.addEventListener('visibilitychange', () => {
     scheduleNationalLayerRefresh(true, 160);
   }
 });
-map.on('moveend zoomend', () => {
+antennaView.map.on('moveend zoomend', () => {
   scheduleNationalLayerRefresh();
 });
 
